@@ -99,7 +99,7 @@ Actually, still not terrible, but ...
 - What if we want to add more precise customization?
 - How can we document our types and fields nicely?
 - How can we get more control over the schema generated, including named schema types, reference, etc?
-- What if you also want JSON Schema / YAML Schema / Swagger 2?
+- What if we also want JSON Schema / YAML Schema / Swagger 2?
 - Can we just write one definition that will automatically do all of this for us?
 
 ---
@@ -374,8 +374,7 @@ instance HasCodec Expression where
             "type": "string"
         }
     },
-    "required": [ "left", "right", "type"
-    ],
+    "required": [ "left", "right", "type" ],
     "type": "object"
 }
 ```
