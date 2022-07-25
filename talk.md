@@ -272,15 +272,10 @@ data Expression
 ```haskell
 instance HasCodec Expression where
   codec =
-    named "Expression" $
-      object "Expression" $
-        discriminatedUnionCodec "type" enc dec
+    named "Expression" $ object "Expression" $ discriminatedUnionCodec "type" enc dec
     where
       valueFieldCodec = requiredField' "value"
-      lrFieldsCodec =
-        (,)
-          <$> requiredField' "left" .= fst
-          <*> requiredField' "right" .= snd
+      lrFieldsCodec = (,) <$> requiredField' "left" .= fst <*> requiredField' "right" .= snd
       enc = \case
         LiteralExpression n -> ("literal", mapToEncoder n valueFieldCodec)
         SumExpression l r -> ("sum", mapToEncoder (l, r) lrFieldsCodec)
