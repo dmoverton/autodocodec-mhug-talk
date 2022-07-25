@@ -245,3 +245,110 @@ instance HasCodec NewZealandObject where
       propValueCodec = StringCodec Nothing
       doco = Just "Must be said in an NZ accent"
 ```
+
+---
+
+## Multiple Properties via Applicative
+We can see how to capture one property, but in order to capture multiple properties and combine them into a Haskell record, we need Applicatives!
+
+```haskell
+ApCodec ::
+  ObjectCodec input (output -> newOutput) ->
+  ObjectCodec input output ->
+  ObjectCodec input newOutput
+
+PureCodec ::
+  output ->
+  ObjectCodec void output
+```
+
+```haskell
+instance Applicative (ObjectCodec input) where
+  pure = PureCodec
+  (<*>) = ApCodec
+```
+
+A key observation is that the applicative instance is only over the `output` type parameter and not `input`!
+
+---
+
+### Example: JSON object with multiple properties (Step 1)
+
+```json
+{ "firstName": "Daniel", "lastName": "Chambers" }
+```
+```haskell
+data FullName = FullName { _fnFirstName :: Text, _fnLastName :: Text }
+
+instance HasCodec FullName where
+  codec :: ValueCodec FullName FullName
+  codec =
+    ObjectOfCodec (Just "FullName") $
+      FullName
+        <$> firstNameCodec -- ERROR! Applicative changes the output type param, 
+        <*> lastNameCodec  --        but not the input type param!
+    where
+      firstNameCodec :: ObjectCodec Text Text
+      firstNameCodec = RequiredKeyCodec "firstName" textCodec noDoco
+
+      lastNameCodec :: ObjectCodec Text Text
+      lastNameCodec = RequiredKeyCodec "lastName" textCodec noDoco
+
+      textCodec = StringCodec Nothing
+      noDoco = Nothing
+```
+
+---
+
+### Example: JSON object with multiple properties (Step 2)
+
+```json
+{ "firstName": "Daniel", "lastName": "Chambers" }
+```
+```haskell
+data FullName = FullName { _fnFirstName :: Text, _fnLastName :: Text }
+
+instance HasCodec FullName where
+  codec :: ValueCodec FullName FullName
+  codec =
+    ObjectOfCodec (Just "FullName") $
+      FullName
+        <$> firstNameCodec
+        <*> lastNameCodec
+    where
+      firstNameCodec :: ObjectCodec FullName Text
+      firstNameCodec = 
+        dimapCodec id _fnFirstName $ RequiredKeyCodec "firstName" textCodec noDoco
+
+      lastNameCodec :: ObjectCodec FullName Text
+      lastNameCodec = 
+        dimapCodec id _fnLastName $ RequiredKeyCodec "lastName" textCodec noDoco
+
+      textCodec = StringCodec Nothing
+      noDoco = Nothing
+```
+
+---
+
+### Example: JSON object with multiple properties (Step 3)
+
+```json
+{ "firstName": "Daniel", "lastName": "Chambers" }
+```
+```haskell
+data FullName = FullName { _fnFirstName :: Text, _fnLastName :: Text }
+
+instance HasCodec FullName where
+  codec :: ValueCodec FullName FullName
+  codec =
+    object "FullName" $
+      FullName
+        <$> requiredField' "firstName" .= _fnFirstName
+        <*> requiredField' "lastName" .= _fnLastName
+```
+
+* `object` makes our `ObjectOfCodec` with a name
+* `requiredField'` makes our `RequiredKeyCodec` (with no documentation)
+* `.=` maps our input type parameter
+
+**Much cleaner!**
