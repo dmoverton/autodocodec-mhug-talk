@@ -123,9 +123,9 @@ Autodocodec knows how to encode/decode these basic types, so these codecs effect
 
 ```haskell
 ArrayOfCodec ::
-    Maybe Text ->              -- Name of the array, for error messages and doco
-    ValueCodec input output -> -- Codec to use with the array elements
-    ValueCodec (Vector input) (Vector output)
+  Maybe Text ->              -- Name of the array, for error messages and doco
+  ValueCodec input output -> -- Codec to use with the array elements
+  ValueCodec (Vector input) (Vector output)
 ```
 
 How to encode/decode an array is also built in to Autodocodec. All you need to do is tell it how do encode and decode each of the values (`ValueCodec input output`). 
@@ -166,10 +166,10 @@ codec = dimapCodec Vector.toList Vector.fromList . ArrayOfCodec Nothing
 
 ```haskell
 BimapCodec ::
-    (oldOutput -> Either String newOutput) -> -- Decoding function
-    (newInput -> oldInput) ->                 -- Encoding function
-    Codec context oldInput oldOutput ->       -- The old codec
-    Codec context newInput newOutput
+  (oldOutput -> Either String newOutput) -> -- Decoding function
+  (newInput -> oldInput) ->                 -- Encoding function
+  Codec context oldInput oldOutput ->       -- The old codec
+  Codec context newInput newOutput
 ```
 
 The decoding function is allowed to fail. The encoding function must always succeed.
