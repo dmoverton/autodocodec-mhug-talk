@@ -66,7 +66,7 @@ data Expression
 # How does it work?
 
 ---
-## The `Codec` GADT type
+## The `Codec` GADT
 
 ```haskell
 data Codec context input output where
@@ -108,14 +108,14 @@ StringCodec :: {- Name of string -} Maybe Text -> ValueCodec Text Text
 NumberCodec :: {- Name of number -} Maybe Text -> Maybe NumberBounds -> ValueCodec Scientific Scientific
 ```
 
-The matching basic data types have `HasClass` instances already. For example:
+The basic data types have matching `HasClass` instances already. For example:
 
 ```haskell
 instance HasCodec Text where
   codec = StringCodec Nothing
 ```
 
-Autodocodec knows how to encode/decode these basic types, so these codecs effectively act as placeholders.
+Autodocodec knows how to encode/decode these basic types, so these codecs effectively act as placeholders and contain no encoding/decoding logic.
 
 ---
 
@@ -123,15 +123,14 @@ Autodocodec knows how to encode/decode these basic types, so these codecs effect
 
 ```haskell
 ArrayOfCodec ::
-    -- | Name of the @array@, for error messages and documentation.
-    Maybe Text ->
-    ValueCodec input output ->
+    Maybe Text ->              -- Name of the array, for error messages and doco
+    ValueCodec input output -> -- Codec to use with the array elements
     ValueCodec (Vector input) (Vector output)
 ```
 
 How to encode/decode an array is also built in to Autodocodec. All you need to do is tell it how do encode and decode each of the values (`ValueCodec input output`). 
 
-Naturally, a typeclass instance exists to help encode/decode lists:
+Naturally, a typeclass instance exists to help encode/decode Haskell lists:
 
 ```haskell
 instance HasCodec a => HasCodec [a] where
@@ -189,7 +188,7 @@ Let's start talking about `ObjectCodec`s.
 
 ---
 
-## Capturing object properties
+## Capturing an object property
 
 ```haskell
 RequiredKeyCodec ::
@@ -205,7 +204,7 @@ OptionalKeyCodec ::
   ObjectCodec (Maybe input) (Maybe output)
 ```
 
-These two codecs allow us to capture the existence of property ("key") on an object, along with how to encode/decode the property value. 
+These two codecs allow us to capture the existence of a property (a "key") on an object, along with how to encode/decode the property value. 
 
 `RequiredKeyCodec` is for when the property must exist on the object, `OptionalKeyCodec` is for when it does not need to exist (hence the `Maybe` in the codec's `input` and `output` types).
 
