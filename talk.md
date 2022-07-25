@@ -10,38 +10,228 @@ marp: true
 
 ### David Overton & Daniel Chambers
 
----
+<!-- ---
 
 # Agenda
 
 1. Introduction
 2. Deep-dive
-3. ...
+3. ... -->
 
 ---
 
-# Introduction
+# The Problem
+
+- You have some Haskell types that represent Data Transfer Objects for some API
+- You want to write round-trippable JSON serialization and deserialization (codec) for each type
+- You also want to generate an OpenAPI 3 schema for the types that matches the JSON codecs
+- You'd like to add useful documentation 
 
 ---
 
-# Haskell Examples
-
-## Record type
+# Example
 
 ```haskell
-data Person =
-  { personName :: Name,
-    personAge :: Int,
-    personFavouriteColour :: Colour
+data Person = Person
+  { personName :: Text,
+    personAge :: Int
   }
+  deriving (Eq, Ord, Show, Generic)
+
+instance ToJSON Person
+instance FromJSON Person
+instance ToSchema Person
+
+aPerson :: Person
+aPerson = Person "John Smith" 21
 ```
 
 ---
 
-## Bounded enum
+## `toJSON`
+
+```json
+{
+    "personAge": 21,
+    "personName": "John Smith"
+}
+```
+
+## `toSchema`
+
+```json
+{
+    "properties": {
+        "personAge": { "type": "integer" },
+        "personName": { "type": "string" }
+    },
+    "required": [ "personName", "personAge" ],
+    "type": "object"
+}
+```
+
+So far so good! But what if we want something other than the default instances?
+
+---
+
+## Aeson options
+
+```haskell
+myOptions :: Options
+myOptions = aesonPrefix snakeCase
+
+instance ToJSON Person where 
+  toJSON = genericToJSON myOptions
+
+instance FromJSON Person where
+  parseJSON = genericParseJSON myOptions
+
+instance ToSchema Person where
+  declareNamedSchema = genericDeclareNamedSchema $ fromAesonOptions myOptions
+```
+
+Actually, still not terrible, but ...
+
+---
+
+## But ...
+
+- What if we want to add more precise customization?
+- How can we document our types and fields nicely?
+- How can we get more control over the schema generated, including named schema types, reference, etc?
+- What if you also want JSON Schema / YAML Schema / Swagger 2?
+- Can we just write one definition that will automatically do all of this for us?
+
+---
+
+# Introducing Autodocodec
+
+```haskell
+data Person = Person
+  { personName :: Text,
+    personAge :: Int
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Person
+
+instance HasCodec Person where
+  codec =
+    object "Person" $
+      Person
+        <$> requiredField "name" "The person's name" .= personName
+        <*> requiredField "age" "The person's age" .= personAge
+```
+
+---
+
+```haskell
+Person {personName = "John Smith", personAge = 21}
+```
+
+```json
+{
+    "age": 21,
+    "name": "John Smith"
+}
+```
+
+```json
+{
+    "properties": {
+        "age": { "description": "The person's age", "type": "number" },
+        "name": { "description": "The person's name", "type": "string" }
+    },
+    "required": [ "name", "age" ],
+    "type": "object"
+}
+```
+
+---
+
+# Cool! So what else can it do?
+
+---
+
+## Optional fields, more documentation
+
+```haskell
+data Person = Person
+  { personName :: Text,
+    personAge :: Maybe Int
+  }
+  deriving stock (Eq, Ord, Show, Generic)
+  deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Person
+
+instance HasCodec Person where
+  codec =
+    object "Person" personCodec
+      <?> "An object representing a person"
+    where
+      personCodec =
+        Person
+          <$> requiredField "name" "The person's name" .= personName
+          <*> optionalField "age" "The person's age" .= personAge
+```
+
+---
+
+```json
+{
+    "description": "An object representing a person",
+    "properties": {
+        "age": {
+            "description": "The person's age",
+            "type": "number"
+        },
+        "name": {
+            "description": "The person's name",
+            "type": "string"
+        }
+    },
+    "required": [
+        "name"
+    ],
+    "type": "object"
+}
+```
+---
+
+## Bounded enum - using `Show` and `Bounded` instances
 
 ```haskell
 data Colour = Red | Green | Blue
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+  deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Colour
+
+instance HasCodec Colour where
+  codec = shownBoundedEnumCodec
+```
+
+```json
+{
+    "enum": [ "Red", "Green", "Blue" ],
+    "type": "string"
+}
+```
+
+---
+
+## Enum with explicit values
+
+```haskell
+data Colour = Red | Green | Blue
+  deriving stock (Eq, Ord, Show, Enum, Bounded)
+  deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Colour
+
+instance HasCodec Colour where
+  codec = stringConstCodec [(Red, "red"), (Green, "green"),  (Blue, "blue")]
+```
+
+```json
+{
+    "enum": [ "red", "green", "blue" ],
+    "type": "string"
+}
 ```
 
 ---
@@ -50,16 +240,149 @@ data Colour = Red | Green | Blue
 
 ```haskell
 newtype Name = Name { unName :: Text }
+  deriving stock (Eq, Ord, Show)
+  deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Name
+
+instance HasCodec Name where
+  codec = dimapCodec Name unName textCodec <?> "A name"
+```
+
+```json
+{
+    "description": "A name",
+    "type": "string"
+}
 ```
 
 ---
 
-## (Recursive) Sum type
+## Recursive Sum type
 
 ```haskell
 data Expression
-  = ExpressionLiteral Int
-  | ExpressionSum Expression Expression
+  = LiteralExpression Int
+  | SumExpression Expression Expression
+  | ProductExpression Expression Expression
+  deriving stock (Show, Eq, Generic)
+  deriving (FromJSON, ToJSON, ToSchema) via (Autodocodec Expression)
+```
+ 
+---
+
+```haskell
+instance HasCodec Expression where
+  codec =
+    named "Expression" $
+      object "Expression" $
+        discriminatedUnionCodec "type" enc dec
+    where
+      valueFieldCodec = requiredField' "value"
+      lrFieldsCodec =
+        (,)
+          <$> requiredField' "left" .= fst
+          <*> requiredField' "right" .= snd
+      enc = \case
+        LiteralExpression n -> ("literal", mapToEncoder n valueFieldCodec)
+        SumExpression l r -> ("sum", mapToEncoder (l, r) lrFieldsCodec)
+        ProductExpression l r -> ("product", mapToEncoder (l, r) lrFieldsCodec)
+      dec =
+        HashMap.fromList
+          [ ( "literal",
+              ("LiteralExpression", mapToDecoder LiteralExpression valueFieldCodec)
+            ),
+            ( "sum",
+              ("SumExpression", mapToDecoder (uncurry SumExpression) lrFieldsCodec)
+            ),
+            ( "product",
+              ("ProductExpression", mapToDecoder (uncurry ProductExpression) lrFieldsCodec)
+            )
+          ]
+
+```
+
+---
+
+```json
+"Expression": {
+    "discriminator": {
+        "mapping": {
+            "literal": "LiteralExpression",
+            "product": "ProductExpression",
+            "sum": "SumExpression"
+        },
+        "propertyName": "type"
+    },
+    "oneOf": [
+        {
+            "$ref": "#/components/schemas/ProductExpression"
+        },
+        {
+            "$ref": "#/components/schemas/LiteralExpression"
+        },
+        {
+            "$ref": "#/components/schemas/SumExpression"
+        }
+    ]
+}
+```
+
+---
+
+```json
+"LiteralExpression": {
+    "properties": {
+        "type": {
+            "enum": [ "literal" ],
+            "type": "string"
+        },
+        "value": { "type": "number" }
+    },
+    "required": [ "value", "type" ],
+    "type": "object"
+}
+```
+
+---
+
+```json
+"ProductExpression": {
+    "properties": {
+        "left": {
+            "$ref": "#/components/schemas/Expression"
+        },
+        "right": {
+            "$ref": "#/components/schemas/Expression"
+        },
+        "type": {
+            "enum": [ "product" ],
+            "type": "string"
+        }
+    },
+    "required": [ "left", "right", "type" ],
+    "type": "object"
+}
+```
+
+---
+
+```json
+"SumExpression": {
+    "properties": {
+        "left": {
+            "$ref": "#/components/schemas/Expression"
+        },
+        "right": {
+            "$ref": "#/components/schemas/Expression"
+        },
+        "type": {
+            "enum": [ "sum" ],
+            "type": "string"
+        }
+    },
+    "required": [ "left", "right", "type"
+    ],
+    "type": "object"
+}
 ```
 
 ---
