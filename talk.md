@@ -669,3 +669,148 @@ instance HasCodec FullName where
 * `.=` maps our input type parameter
 
 **Much cleaner!**
+
+---
+
+# What about sum types?
+
+---
+
+## The Either Codec
+
+```haskell
+EitherCodec ::
+  Union ->                        -- Do the types overlap or not?
+  Codec context input1 output1 -> -- Codec for the first alternative
+  Codec context input2 output2 -> -- Codec for the second alternative
+  Codec context (Either input1 input2) (Either output1 output2)
+```
+The Either Codec allows us to capture the alternative between two codecs. When decoding, the first codec is tried first, and then the second is tried. 
+
+`Union` controls whether we allow the encoded representations to overlap. If we declare it to be a `DisjointUnion`, then decoding fails if both decoders succeed. `PossiblyJointUnion` allows us to simply accept the first that is successfully decoded.
+
+---
+
+### Example: Accept either Text or Number
+
+```haskell
+data TextOrNumber
+  = Text Text
+  | Number Scientific
+
+instance HasCodec TextOrNumber where
+  codec :: ValueCodec TextOrNumber TextOrNumber
+  codec =
+    dimapCodec decode encode stringOrNumber
+    where
+      stringOrNumber :: ValueCodec (Either Text Scientific) (Either Text Scientific)
+      stringOrNumber =
+        EitherCodec DisjointUnion (StringCodec Nothing) (NumberCodec Nothing Nothing)
+      
+      decode :: Either Text Scientific -> TextOrNumber
+      decode = \case
+        Left txt -> Text txt
+        Right sci -> Number sci
+      
+      encode :: TextOrNumber -> Either Text Scientific
+      encode = \case
+        Text txt -> Left txt
+        Number sci -> Right sci
+```
+
+---
+
+## Hardcoding Values - The Eq Codec
+
+Sometimes we have a known discrete value we want to use in the encoding/decoding. For example, enums are a set of known discrete values.
+
+```haskell
+EqCodec ::
+  (Show value, Eq value) =>
+  value ->                  -- Value to match
+  ValueCodec value value -> -- Codec for the value
+  ValueCodec value value
+```
+
+The `EqCodec` allows us to capture a discrete value in our encoding/decoding structure and only succeed at decoding if that particular value is matched.
+
+---
+
+### Example: Yes/No enum (Step 1)
+
+```haskell
+data YesNo = Yes | No
+
+instance HasCodec YesNo where
+  codec =
+    dimapCodec decode encode $ EitherCodec DisjointUnion yes no
+    where 
+      yes :: ValueCodec Text YesNo
+      yes = dimapCodec (const Yes) id $ EqCodec "Yes" (StringCodec Nothing)
+
+      no :: ValueCodec Text YesNo
+      no = dimapCodec (const No) id $ EqCodec "No" (StringCodec Nothing)
+
+      decode :: Either YesNo YesNo -> YesNo
+      decode = either id id
+      
+      encode :: YesNo -> Either Text Text
+      encode = \case
+        Yes -> Left "Yes"
+        No -> Right "No"
+```
+
+---
+
+### Example: Yes/No enum (Step 2)
+
+```haskell
+data YesNo = Yes | No
+  deriving stock (Eq, Show, Bounded, Enum)
+
+instance HasCodec YesNo where
+  codec = shownBoundedEnumCodec
+```
+
+**Much simpler 😉**
+
+---
+
+# So how is all this used to produce JSON Serialization and OpenAPI Schema?
+
+Basically: walk the assembled data structure of codecs and based on what you encounter, perform JSON encoding/decoding or create an OpenAPI schema!
+
+Let's look at a snippet to get a sense of it.
+
+---
+
+## EqCodec
+
+JSON Decoding
+```haskell
+EqCodec expectedValue valueCodec -> do
+  actualValue <- go inputValue valueCodec
+  if expectedValue == actualValue
+    then pure actualValue
+    else fail $ unwords ["Expected", show expectedValue, "but got", show actualValue]
+------------------------------------------------------------------------------------------------------------
+```
+
+OpenAPI Schema
+```haskell
+EqCodec expectedValue valueCodec ->
+  pure $
+    NamedSchema Nothing $
+      let jsonVal = toJSONVia valueCodec expectedValue
+        in mempty
+            { _schemaEnum = Just [jsonVal],
+              _schemaType = Just $ case jsonVal of
+                Aeson.Object {} -> OpenApiObject
+                Aeson.Array {} -> OpenApiArray
+                Aeson.String {} -> OpenApiString
+                Aeson.Number {} -> OpenApiNumber
+                Aeson.Bool {} -> OpenApiBoolean
+                Aeson.Null -> OpenApiNull
+            }
+---------------------------------------------------------------------------------------------------------------
+```
