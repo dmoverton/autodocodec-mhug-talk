@@ -138,7 +138,6 @@ data Person = Person
   { personName :: Text,
     personAge :: Maybe Int
   }
-  deriving stock (Eq, Ord, Show, Generic)
   deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Person
 
 instance HasCodec Person where
@@ -179,7 +178,7 @@ instance HasCodec Person where
 
 ```haskell
 data Colour = Red | Green | Blue
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
+  deriving stock (Enum, Bounded)
   deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Colour
 
 instance HasCodec Colour where
@@ -199,7 +198,6 @@ instance HasCodec Colour where
 
 ```haskell
 data Colour = Red | Green | Blue
-  deriving stock (Eq, Ord, Show, Enum, Bounded)
   deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Colour
 
 instance HasCodec Colour where
@@ -219,7 +217,6 @@ instance HasCodec Colour where
 
 ```haskell
 newtype Name = Name { unName :: Text }
-  deriving stock (Eq, Ord, Show)
   deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Name
 
 instance HasCodec Name where
@@ -242,7 +239,6 @@ data Expression
   = LiteralExpression Int
   | SumExpression Expression Expression
   | ProductExpression Expression Expression
-  deriving stock (Show, Eq, Generic)
   deriving (FromJSON, ToJSON, ToSchema) via (Autodocodec Expression)
 ```
  
