@@ -36,7 +36,7 @@ data Person = Person
   { personName :: Text,
     personAge :: Int
   }
-  deriving (Eq, Ord, Show, Generic)
+  deriving (Generic)
 
 instance ToJSON Person
 instance FromJSON Person
@@ -70,35 +70,15 @@ aPerson = Person "John Smith" 21
 }
 ```
 
-So far so good! But what if we want something other than the default instances?
-
----
-
-## Aeson options
-
-```haskell
-myOptions :: Options
-myOptions = aesonPrefix snakeCase
-
-instance ToJSON Person where 
-  toJSON = genericToJSON myOptions
-
-instance FromJSON Person where
-  parseJSON = genericParseJSON myOptions
-
-instance ToSchema Person where
-  declareNamedSchema = genericDeclareNamedSchema $ fromAesonOptions myOptions
-```
-
-Actually, still not terrible, but ...
+Not bad. **But...**
 
 ---
 
 ## But ...
 
-- What if we want to add more precise customization?
+- What if we want to customize it? 
 - How can we document our types and fields nicely?
-- How can we get more control over the schema generated, including named schema types, reference, etc?
+- How can we get more control over the schema generated, including named schema types, references, etc?
 - What if we also want JSON Schema / YAML Schema / Swagger 2?
 - Can we just write one definition that will automatically do all of this for us?
 
@@ -111,7 +91,6 @@ data Person = Person
   { personName :: Text,
     personAge :: Int
   }
-  deriving stock (Eq, Ord, Show, Generic)
   deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Person
 
 instance HasCodec Person where
