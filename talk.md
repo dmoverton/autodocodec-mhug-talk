@@ -76,7 +76,7 @@ Not bad. **But...**
 
 ## But ...
 
-- What if we want to customize it? 
+- What if we want to customize and/or be more explicit about how it is encoded/decoded?
 - How can we document our types and fields nicely?
 - How can we get more control over the schema generated, including named schema types, references, etc?
 - What if we also want JSON Schema / YAML Schema / Swagger 2?
@@ -178,7 +178,7 @@ instance HasCodec Person where
 
 ```haskell
 data Colour = Red | Green | Blue
-  deriving stock (Enum, Bounded)
+  deriving stock (Show, Enum, Bounded)
   deriving (FromJSON, ToJSON, ToSchema) via Autodocodec Colour
 
 instance HasCodec Colour where
